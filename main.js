@@ -58,7 +58,7 @@ function cleanupGame() {
                 audio.removeAttribute('src');
                 audio.load();
             } catch (e) {
-                // Ignore cleanup errors
+                console.error('Error', error)
             }
         }
     });
