@@ -17,17 +17,17 @@ window.gameOver = false;
 window.gamePaused = gamePaused;
 
 // SFX
-const cometSound = new Audio('comet.wav');
+const cometSound = new Audio('../assests/sounds/comet.wav');
 cometSound.volume = 0.6;
-const explosionSound = new Audio('explosion.wav');
+const explosionSound = new Audio('../assests/sounds/explosion.wav');
 explosionSound.volume = 0.7;
-const zapSound = new Audio('zap.mp3');
+const zapSound = new Audio('../assests/sounds/zap.mp3');
 zapSound.volume = 0.8;
-const finalSound = new Audio('final.mp3');
+const finalSound = new Audio('../assests/sounds/final.mp3');
 finalSound.volume = 0.9;
-const pickSound = new Audio('pick.mp3');
+const pickSound = new Audio('../assests/sounds/pick.mp3');
 pickSound.volume = 0.5;
-const powerupSound = new Audio('power_up.mp3');
+const powerupSound = new Audio('../assests/sounds/power_up.mp3');
 powerupSound.volume = 0.5;
 
 // Global cleanup state
