@@ -30,18 +30,18 @@ class AudioManager {
         
         try {
             // Use existing space music as base layer
-            this.baseMusic = new Audio('space.mp3');
+            this.baseMusic = new Audio('./assets/sounds/space.mp3');
             this.baseMusic.loop = true;
             this.baseMusic.volume = this.musicCfg.baseVolume || 0.4;
             
-            // Create percussion layer (reuse space.mp3 with different processing)
-            this.percussionLayer = new Audio('space.mp3');
+            // Create percussion layer (reuse ./assets/sounds/space.mp3 with different processing)
+            this.percussionLayer = new Audio('./assets/sounds/space.mp3');
             this.percussionLayer.loop = true;
             this.percussionLayer.volume = 0; // Start silent
             this.percussionLayer.playbackRate = 1.1; // Slightly faster for percussion feel
             
             // Create bass layer
-            this.bassLayer = new Audio('space.mp3');
+            this.bassLayer = new Audio('./assets/sounds/space.mp3');
             this.bassLayer.loop = true;
             this.bassLayer.volume = 0; // Start silent
             this.bassLayer.playbackRate = 0.8; // Slower, deeper feel
