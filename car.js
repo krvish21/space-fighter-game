@@ -18,13 +18,13 @@ class Car {
         this.rotationSpeed = 0.1;
 
         this.isDriving = false;
-        this.drivingSound = new Audio('space.mp3');
+        this.drivingSound = new Audio('./assets/sounds/space.mp3');
         this.drivingSound.loop = true;
         this.drivingSound.volume = 0.5;
         this.audioPlaying = false;
 
 		// Background space music
-		this.spaceMusic = new Audio('space.mp3');
+		this.spaceMusic = new Audio('./assets/sounds/space.mp3');
 		this.spaceMusic.loop = true;
 		this.spaceMusic.volume = 0.4;
 		this.spaceMusicPlaying = false;
@@ -336,14 +336,14 @@ class Car {
     initializeAudio() {
         // Reinitialize audio objects if they were cleaned up
         if (!this.spaceMusic) {
-            this.spaceMusic = new Audio('space.mp3');
+            this.spaceMusic = new Audio('./assets/sounds/space.mp3');
             this.spaceMusic.loop = true;
             this.spaceMusic.volume = 0.4;
             this.spaceMusicPlaying = false;
         }
         
         if (!this.drivingSound) {
-            this.drivingSound = new Audio('space.mp3');
+            this.drivingSound = new Audio('./assets/sounds/space.mp3');
             this.drivingSound.loop = true;
             this.drivingSound.volume = 0.5;
             this.audioPlaying = false;
