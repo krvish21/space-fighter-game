@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Fighter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <canvas id="myCanvas"></canvas>
+
+    <div id="menu" class="menu-overlay">
+        <!-- Animated Background Effects -->
+        <div class="stars-bg"></div>
+        <div class="nebula-bg"></div>
+        <div class="grid-overlay"></div>
+        
+        <!-- Main Menu Content -->
+        <div class="menu-container">
+            <!-- Title Section -->
+            <div class="title-section">
+                <h1 class="game-title">
+                    <span class="title-word">SPACE</span>
+                    <span class="title-word">FIGHTER</span>
+                </h1>
+                <div class="title-subtitle">Elite Pilot Combat Simulator</div>
+                <div class="title-underline"></div>
+            </div>
+
+            <!-- Features Showcase -->
+            <div class="features-showcase">
+                <div class="feature-category">
+                    <h3>COMBAT SYSTEMS</h3>
+                    <div class="feature-grid">
+                        <div class="feature-item">
+                            <div class="feature-icon">⚡</div>
+                            <div class="feature-text">Dynamic Enemies</div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">🛡️</div>
+                            <div class="feature-text">Shield Defense</div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">💥</div>
+                            <div class="feature-text">Nova Bombs</div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">🤖</div>
+                            <div class="feature-text">Combat Drones</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="feature-category">
+                    <h3>POWER SYSTEMS</h3>
+                    <div class="feature-grid">
+                        <div class="feature-item">
+                            <div class="feature-icon">🚀</div>
+                            <div class="feature-text">Speed Boost</div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">🧲</div>
+                            <div class="feature-text">Magnet Field</div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">🌙</div>
+                            <div class="feature-text">Lunar Healing</div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">☄️</div>
+                            <div class="feature-text">Comet Strikes</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="feature-category">
+                    <h3>ENVIRONMENT</h3>
+                    <div class="feature-grid">
+                        <div class="feature-item">
+                            <div class="feature-icon">🌌</div>
+                            <div class="feature-text">Dynamic Nebula</div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">⚡</div>
+                            <div class="feature-text">Visual Effects</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Controls -->
+            <div class="game-controls">
+                <div class="difficulty-section">
+                    <label for="difficulty" class="control-label">MISSION DIFFICULTY</label>
+                    <select id="difficulty" class="difficulty-select">
+                        <option value="easy">CADET</option>
+                        <option value="normal" selected>PILOT</option>
+                        <option value="hard">ACE</option>
+                    </select>
+                </div>
+
+                <button id="start-btn" class="start-button">
+                    <span class="button-text">LAUNCH MISSION</span>
+                    <div class="button-glow"></div>
+                    <div class="button-particles"></div>
+                </button>
+            </div>
+
+            <!-- Status Indicators -->
+            <div class="status-indicators">
+                <div class="status-item">
+                    <div class="status-dot active"></div>
+                    <span>SYSTEMS ONLINE</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-dot active"></div>
+                    <span>WEAPONS ARMED</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-dot active"></div>
+                    <span>READY FOR COMBAT</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scanning Lines Effect -->
+        <div class="scan-lines"></div>
+    </div>
+
+    <!-- Core Game Systems -->
+    <script src="config.js"></script>
+    <script src="canvas.js"></script>
+    <script src="controls.js"></script>
+    <script src="audio-manager.js"></script>
+    
+    <!-- Visual Effects -->
+    <script src="visual-effects.js"></script>
+    
+    <!-- Game Over Screen -->
+    <script src="game-over-screen.js"></script>
+    
+    <!-- Enemy Types -->
+    <script src="enemies/asteroid.js"></script>
+    <script src="enemies/heal-enemy.js"></script>
+    <script src="enemies/homing-mine.js"></script>
+    <script src="enemies/speed-boost-enemy.js"></script>
+    <script src="enemies/magnet-enemy.js"></script>
+    <script src="enemy-factory.js"></script>
+    
+    <!-- Game Components -->
+    <script src="pickups.js"></script>
+    <script src="drone-system.js"></script>
+    
+    <!-- Player -->
+    <script src="car.js"></script>
+    
+    <!-- Legacy compatibility (loads after new modular files) -->
+    <!-- <script src="enemy.js"></script> -->
+    
+    <!-- Main Game Loop -->
+    <script src="main.js"></script>
+</body>
+
+</html>
