@@ -148,7 +148,7 @@ window.CONFIG = {
         windowChance: 0.22, // chance to spawn when window opens
         lifetimeMs: 9000, // pickup exists this long if not collected
         maxHits: 3, // collisions absorbed while active
-        pickupSound: 'power_up.mp3' // reuse or replace with dedicated sfx
+        pickupSound: './assets/sounds/power_up.mp3' // reuse or replace with dedicated sfx
     },
     magnet: {
         spawnChance: 0.08, // portion of non-dark spawns to be magnet pickups
