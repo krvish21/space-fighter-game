@@ -14,6 +14,7 @@ class AudioManager {
 
         // Keep track of active nodes so we can cleanly disconnect
         this.activeNodes = new Set();
+        this.loops = new Map(); // token -> node group for looped sounds
     }
 
     ensureAudioContext() {
@@ -178,6 +179,112 @@ class AudioManager {
             console.warn('AudioManager: failed to play', nameOrUrl, e);
             return false;
         }
+    }
+
+    // Play a looped sound and return a token that can be used to update pan or stop the loop.
+    // Returns a string token or null on failure.
+    async playLoop(nameOrUrl, x = null, y = null, canvasWidth = null, canvasHeight = null, opts = {}) {
+        const ctx = this.ensureAudioContext();
+        const token = `${nameOrUrl}::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`;
+
+        // Helper to create a looped buffer source
+        const createLoopFromBuffer = (buffer) => {
+            try {
+                if (!ctx || !buffer) return null;
+                if (ctx.state === 'suspended' && typeof ctx.resume === 'function') ctx.resume().catch(() => { });
+                const src = ctx.createBufferSource();
+                src.buffer = buffer;
+                src.loop = true;
+                const gain = ctx.createGain();
+                gain.gain.value = (opts.volume != null) ? opts.volume : 1.0;
+
+                let panNode = null;
+                if (typeof ctx.createStereoPanner === 'function' && x != null && canvasWidth) {
+                    panNode = ctx.createStereoPanner();
+                    panNode.pan.value = this._calculatePan(x, canvasWidth);
+                }
+
+                src.connect(gain);
+                if (panNode) { gain.connect(panNode); panNode.connect(ctx.destination); }
+                else { gain.connect(ctx.destination); }
+
+                const nodeGroup = { type: 'buffer', src, gain, panNode };
+                this.loops.set(token, nodeGroup);
+                src.start(0);
+                return token;
+            } catch (e) {
+                console.warn('AudioManager: createLoopFromBuffer failed', e);
+                return null;
+            }
+        };
+
+        // Try to reuse decoded buffer if available
+        let buffer = this.sounds.get(nameOrUrl);
+        if (!buffer) {
+            const baseKey = nameOrUrl && String(nameOrUrl).replace(/\.\w+$/, '');
+            if (baseKey && this.sounds.has(baseKey)) buffer = this.sounds.get(baseKey);
+        }
+        if (!buffer && this.soundUrls.has(nameOrUrl)) {
+            const url = this.soundUrls.get(nameOrUrl);
+            try {
+                const res = await fetch(url);
+                const arr = await res.arrayBuffer();
+                const decoded = await ctx.decodeAudioData(arr);
+                if (decoded) { this.sounds.set(nameOrUrl, decoded); buffer = decoded; }
+            } catch (e) { /* ignore */ }
+        }
+
+        if (buffer) {
+            const t = createLoopFromBuffer(buffer);
+            if (t) return t;
+        }
+
+        // Fallback to HTMLAudio looped element if decoding failed or WebAudio not available
+        try {
+            let url = nameOrUrl;
+            if (!/[\/:]/.test(nameOrUrl) && !/^https?:\/\//.test(nameOrUrl)) {
+                url = (this.cfg.basePath || './assets/sounds') + '/' + nameOrUrl.replace(/^\//, '');
+            }
+            const audio = new Audio(url);
+            audio.loop = true;
+            audio.volume = (opts.volume != null) ? opts.volume : 1.0;
+            audio.play().catch(() => { });
+            this.loops.set(token, { type: 'element', audio });
+            return token;
+        } catch (e) {
+            console.warn('AudioManager: playLoop fallback failed', e);
+            return null;
+        }
+    }
+
+    // Update the pan for a loop identified by token
+    updateLoopPan(token, x, canvasWidth) {
+        try {
+            const group = this.loops.get(token);
+            if (!group) return;
+            if (group.type === 'buffer' && group.panNode && typeof group.panNode.pan === 'object') {
+                group.panNode.pan.value = this._calculatePan(x, canvasWidth);
+            } else if (group.type === 'element' && group.audio) {
+                // Can't pan HTMLAudio; could implement WebAudio element source later
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    // Stop and remove a loop
+    stopLoop(token) {
+        try {
+            const group = this.loops.get(token);
+            if (!group) return;
+            if (group.type === 'buffer') {
+                try { group.src.stop(0); } catch (e) { }
+                try { if (group.panNode) group.panNode.disconnect(); } catch (e) { }
+                try { group.gain.disconnect(); } catch (e) { }
+                try { group.src.disconnect(); } catch (e) { }
+            } else if (group.type === 'element') {
+                try { group.audio.pause(); group.audio.src = ''; } catch (e) { }
+            }
+            this.loops.delete(token);
+        } catch (e) { /* ignore */ }
     }
 
     _calculatePan(x, canvasWidth) {

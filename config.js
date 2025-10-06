@@ -26,6 +26,9 @@ window.CONFIG = {
         intervalMs: 800, // base spawn interval
         burstMin: 1,
         burstMax: 3,
+        // Off-screen removal margin (pixels). Enemies farther than this margin beyond the screen
+        // will be culled. Increase to allow slower-moving enemies to enter view.
+        removeMarginPx: 80,
         // Difficulty-specific overrides
         difficulty: {
             easy: {

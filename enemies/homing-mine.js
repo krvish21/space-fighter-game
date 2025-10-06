@@ -9,7 +9,7 @@ class HomingMine {
 
         this.color = '#FF3030'; // red for homing mine
         this.shadowBlur = 15;
-        
+
         const cfg = (window.CONFIG && window.CONFIG.homingMine) || {};
         this.radius = cfg.size || 16; // consistent size for mines
         this.pulsePhase = Math.random() * Math.PI * 2; // random starting phase for pulsing
@@ -23,12 +23,30 @@ class HomingMine {
         // Spawn position and velocity
         const side = Math.floor(Math.random() * 8); // 0..3 edges, 4..7 corners
         let speed = (cfg.baseSpeed || 0.8);
-        
+
         // Apply difficulty-based speed multiplier
         const speedMultiplier = difficultyConfig.enemySpeedMultiplier || 1.0;
         speed *= speedMultiplier;
 
         this.setupSpawnPosition(side, speed, canvasWidth, canvasHeight);
+
+        // standard spawn (no debug)
+
+        // Eject initial projectile toward player on spawn (if player exists)
+        try {
+            const projectileCfg = (window.CONFIG && window.CONFIG.homingMine && window.CONFIG.homingMine.projectile) || {};
+            // Use global car reference if available
+            const playerRef = (typeof car !== 'undefined') ? car : (window.car || null);
+            if (playerRef && window.HomingMineProjectile && window.droneProjectiles) {
+                const px = this.posX;
+                const py = this.posY;
+                const proj = new HomingMineProjectile(px, py, playerRef, projectileCfg);
+                window.droneProjectiles.push(proj);
+            }
+        } catch (e) {
+            // non-fatal if projectiles subsystem is not ready
+            // console.warn('Failed to spawn homing mine projectile:', e);
+        }
     }
 
     setupSpawnPosition(side, speed, canvasWidth, canvasHeight) {
@@ -36,54 +54,90 @@ class HomingMine {
             // Top
             this.posX = Math.floor(Math.random() * Math.max(1, canvasWidth - this.radius * 2));
             this.posY = -this.radius * 2;
-            this.vx = 0;
-            this.vy = speed;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 1) {
             // Bottom
             this.posX = Math.floor(Math.random() * Math.max(1, canvasWidth - this.radius * 2));
             this.posY = canvasHeight + this.radius * 2;
-            this.vx = 0;
-            this.vy = -speed;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 2) {
             // Left
             this.posX = -this.radius * 2;
             this.posY = Math.floor(Math.random() * Math.max(1, canvasHeight - this.radius * 2));
-            this.vx = speed;
-            this.vy = 0;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 3) {
             // Right
             this.posX = canvasWidth + this.radius * 2;
             this.posY = Math.floor(Math.random() * Math.max(1, canvasHeight - this.radius * 2));
-            this.vx = -speed;
-            this.vy = 0;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 4) {
             // Top-left corner
             this.posX = -this.radius * 2;
             this.posY = -this.radius * 2;
-            const d = speed * 0.70710678; // sqrt(1/2)
-            this.vx = d;
-            this.vy = d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         } else if (side === 5) {
             // Top-right corner
             this.posX = canvasWidth + this.radius * 2;
             this.posY = -this.radius * 2;
-            const d = speed * 0.70710678;
-            this.vx = -d;
-            this.vy = d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         } else if (side === 6) {
             // Bottom-left corner
             this.posX = -this.radius * 2;
             this.posY = canvasHeight + this.radius * 2;
-            const d = speed * 0.70710678;
-            this.vx = d;
-            this.vy = -d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         } else {
             // Bottom-right corner
             this.posX = canvasWidth + this.radius * 2;
             this.posY = canvasHeight + this.radius * 2;
-            const d = speed * 0.70710678;
-            this.vx = -d;
-            this.vy = -d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         }
     }
 
@@ -92,24 +146,24 @@ class HomingMine {
         const dx = (playerX + 26) - this.posX; // playerX + half ship width for center
         const dy = (playerY + 13) - this.posY; // playerY + half ship height for center
         const distToPlayer = Math.hypot(dx, dy);
-        
+
         // Update pulse phase for visual effect
         const cfg = (window.CONFIG && window.CONFIG.homingMine) || {};
         this.pulsePhase += cfg.pulseSpeed || 0.15;
-        
+
         // Check if player is within detection radius
         if (distToPlayer <= this.detectionRadius) {
             this.isHoming = true;
-            
+
             // Calculate steering force toward player
             if (distToPlayer > 0) {
                 const targetVx = (dx / distToPlayer) * this.maxSteerSpeed;
                 const targetVy = (dy / distToPlayer) * this.maxSteerSpeed;
-                
+
                 // Gradually steer toward target velocity
                 this.vx += (targetVx - this.vx) * this.steerStrength;
                 this.vy += (targetVy - this.vy) * this.steerStrength;
-                
+
                 // Limit to max speed
                 const currentSpeed = Math.hypot(this.vx, this.vy);
                 if (currentSpeed > this.maxSteerSpeed) {
@@ -123,7 +177,7 @@ class HomingMine {
         if (distToPlayer <= this.blastRadius) {
             this.shouldExplode = true;
         }
-        
+
         this.posX += this.vx;
         this.posY += this.vy;
     }
@@ -137,12 +191,12 @@ class HomingMine {
         // Red homing mine with pulsing effect and directional spikes
         ctx.save();
         ctx.translate(this.posX, this.posY);
-        
+
         // Pulsing glow effect
         const pulseIntensity = 0.7 + 0.3 * Math.sin(this.pulsePhase);
         ctx.shadowColor = this.isHoming ? '#FF6060' : '#FF3030';
         ctx.shadowBlur = this.isHoming ? 25 * pulseIntensity : 15 * pulseIntensity;
-        
+
         // Main mine body (hexagonal shape)
         const bodyRadius = this.radius * 0.8;
         ctx.fillStyle = this.isHoming ? '#FF4444' : '#FF3030';
@@ -159,7 +213,7 @@ class HomingMine {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-        
+
         // Directional spikes (more prominent when homing)
         ctx.strokeStyle = this.isHoming ? '#FFFFFF' : '#FFCCCC';
         ctx.lineWidth = this.isHoming ? 3 : 2;
@@ -175,14 +229,14 @@ class HomingMine {
             ctx.lineTo(x2, y2);
             ctx.stroke();
         }
-        
+
         // Central core (brighter when homing)
         ctx.fillStyle = this.isHoming ? '#FFFFFF' : '#FFAAAA';
         ctx.shadowBlur = this.isHoming ? 10 : 5;
         ctx.beginPath();
         ctx.arc(0, 0, this.radius * 0.3, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Detection range indicator (faint ring when homing)
         if (this.isHoming) {
             ctx.globalAlpha = 0.1;
@@ -193,7 +247,7 @@ class HomingMine {
             ctx.stroke();
             ctx.globalAlpha = 1;
         }
-        
+
         ctx.restore();
 
         // reset shadow

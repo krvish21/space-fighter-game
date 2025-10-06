@@ -14,7 +14,7 @@ class SpeedBoostEnemy {
         // Spawn position and velocity
         const side = Math.floor(Math.random() * 8); // 0..3 edges, 4..7 corners
         let speed = 1.5 + Math.random() * 2.2;
-        
+
         // Apply difficulty-based speed multiplier
         const speedMultiplier = difficultyConfig.enemySpeedMultiplier || 1.0;
         speed *= speedMultiplier;
@@ -27,54 +27,90 @@ class SpeedBoostEnemy {
             // Top
             this.posX = Math.floor(Math.random() * Math.max(1, canvasWidth - this.radius * 2));
             this.posY = -this.radius * 2;
-            this.vx = 0;
-            this.vy = speed;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 1) {
             // Bottom
             this.posX = Math.floor(Math.random() * Math.max(1, canvasWidth - this.radius * 2));
             this.posY = canvasHeight + this.radius * 2;
-            this.vx = 0;
-            this.vy = -speed;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 2) {
             // Left
             this.posX = -this.radius * 2;
             this.posY = Math.floor(Math.random() * Math.max(1, canvasHeight - this.radius * 2));
-            this.vx = speed;
-            this.vy = 0;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 3) {
             // Right
             this.posX = canvasWidth + this.radius * 2;
             this.posY = Math.floor(Math.random() * Math.max(1, canvasHeight - this.radius * 2));
-            this.vx = -speed;
-            this.vy = 0;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const d = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / d) * speed;
+            this.vy = (dy / d) * speed;
         } else if (side === 4) {
             // Top-left corner
             this.posX = -this.radius * 2;
             this.posY = -this.radius * 2;
-            const d = speed * 0.70710678; // sqrt(1/2)
-            this.vx = d;
-            this.vy = d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         } else if (side === 5) {
             // Top-right corner
             this.posX = canvasWidth + this.radius * 2;
             this.posY = -this.radius * 2;
-            const d = speed * 0.70710678;
-            this.vx = -d;
-            this.vy = d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         } else if (side === 6) {
             // Bottom-left corner
             this.posX = -this.radius * 2;
             this.posY = canvasHeight + this.radius * 2;
-            const d = speed * 0.70710678;
-            this.vx = d;
-            this.vy = -d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         } else {
             // Bottom-right corner
             this.posX = canvasWidth + this.radius * 2;
             this.posY = canvasHeight + this.radius * 2;
-            const d = speed * 0.70710678;
-            this.vx = -d;
-            this.vy = -d;
+            const cx = canvasWidth / 2;
+            const cy = canvasHeight / 2;
+            let dx = cx - this.posX;
+            let dy = cy - this.posY;
+            const dist = Math.hypot(dx, dy) || 1;
+            this.vx = (dx / dist) * speed;
+            this.vy = (dy / dist) * speed;
         }
     }
 

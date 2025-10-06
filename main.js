@@ -29,7 +29,8 @@ audioManager.loadSounds({
     zap: './assets/sounds/zap.mp3',
     final: './assets/sounds/final.mp3',
     pick: './assets/sounds/pick.mp3',
-    power_up: './assets/sounds/power_up.mp3'
+    power_up: './assets/sounds/power_up.mp3',
+    hum: './assets/sounds/hum.mp3'
 }).catch(() => { });
 
 // Global cleanup state
@@ -103,8 +104,13 @@ function applyDifficulty(value) {
         spawnInterval: spawnIntervalMs + 'ms',
         burstSize: `${difficultyConfig.burstMin || baseCfg.burstMin || 1}-${difficultyConfig.burstMax || baseCfg.burstMax || 3}`,
         asteroidChance: (difficultyConfig.asteroidChance || 0.85) * 100 + '%',
+        homingMineChance: (difficultyConfig.homingMineChance != null ? difficultyConfig.homingMineChance : baseCfg.homingMineChance != null ? baseCfg.homingMineChance : 0.06),
+        speedBoostChance: (difficultyConfig.speedBoostChance != null ? difficultyConfig.speedBoostChance : 0.12),
+        healChance: (difficultyConfig.healChance != null ? difficultyConfig.healChance : 0.08),
+        magnetChance: (difficultyConfig.magnetChance != null ? difficultyConfig.magnetChance : 0.08),
         enemySpeedMultiplier: difficultyConfig.enemySpeedMultiplier || 1.0
     });
+
 }
 
 if (diffSel) {
@@ -347,8 +353,17 @@ function run(ts) {
                 const drone = sideDrones[i];
                 const stillAlive = drone.update(dt, enemies);
                 if (!stillAlive) {
+                    // stop hum loop for this drone if active
+                    try {
+                        if (drone.humLoopToken) audioManager.stopLoop(drone.humLoopToken);
+                    } catch (e) { }
                     sideDrones.splice(i, 1);
+                    continue;
                 }
+                // Update pan for hum loop so it follows the drone
+                try {
+                    if (drone.humLoopToken) audioManager.updateLoopPan(drone.humLoopToken, drone.x, canvas.width);
+                } catch (e) { }
             }
 
             for (let i = droneProjectiles.length - 1; i >= 0; i--) {
@@ -429,7 +444,15 @@ function run(ts) {
             if (!gamePaused) {
                 // Add safety check for update method
                 if (typeof enemy.update === 'function') {
-                    enemy.update(dt);
+                    // Pass player's top-left coordinates so enemies that need the player position
+                    // (e.g. HomingMine) can calculate distance and behavior. Previously dt was
+                    // incorrectly passed here which prevented homing mines from detecting the player.
+                    try {
+                        enemy.update(car.posX, car.posY);
+                    } catch (e) {
+                        // Fallback: if an enemy expects no args, call without parameters
+                        try { enemy.update(); } catch (e2) { /* ignore */ }
+                    }
                 }
                 // Check collisions between harmful enemies (e.g., asteroids) and trigger explosion
                 try {
@@ -463,8 +486,9 @@ function run(ts) {
                 }
 
                 // Remove enemies that are off-screen or dead
-                if (enemy.posX < -50 || enemy.posX > canvas.width + 50 ||
-                    enemy.posY < -50 || enemy.posY > canvas.height + 50 ||
+                const removeMargin = (window.CONFIG && window.CONFIG.spawn && window.CONFIG.spawn.removeMarginPx) || 50;
+                if (enemy.posX < -removeMargin || enemy.posX > canvas.width + removeMargin ||
+                    enemy.posY < -removeMargin || enemy.posY > canvas.height + removeMargin ||
                     enemy.health <= 0) {
                     enemies.splice(i, 1);
                     continue;
@@ -572,11 +596,14 @@ function run(ts) {
         }
     }
 
+
     for (const proj of droneProjectiles) {
         proj.draw(ctx);
     }
 
     ctx.restore();
+
+
 
     // Draw UI/HUD
     drawHUD(ctx, nowTs);
@@ -793,6 +820,13 @@ function handlePickups(ctx, nowTs) {
 
             if (sideDrones.length < maxDrones) {
                 const newDrone = new SideDrone(car, sideDrones.length);
+                // start hum loop for this drone and store token on the drone
+                try {
+                    newDrone.humLoopToken = null;
+                    audioManager.playLoop('hum', newDrone.x, newDrone.y, canvas.width, canvas.height, { volume: 0.5 })
+                        .then(token => { newDrone.humLoopToken = token; })
+                        .catch(() => { newDrone.humLoopToken = null; });
+                } catch (e) { newDrone.humLoopToken = null; }
                 sideDrones.push(newDrone);
 
                 try { audioManager.playSound('power_up', dronePickup.posX, dronePickup.posY, canvas.width, canvas.height, { volume: 0.7 }); } catch (e) { }
