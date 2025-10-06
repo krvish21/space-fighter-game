@@ -16,19 +16,21 @@ window.gameStarted = gameStarted;
 window.gameOver = false;
 window.gamePaused = gamePaused;
 
-// SFX
-const cometSound = new Audio('./assets/sounds/comet.wav');
-cometSound.volume = 0.6;
-const explosionSound = new Audio('./assets/sounds/explosion.wav');
-explosionSound.volume = 0.7;
-const zapSound = new Audio('./assets/sounds/zap.mp3');
-zapSound.volume = 0.8;
-const finalSound = new Audio('./assets/sounds/final.mp3');
-finalSound.volume = 0.9;
-const pickSound = new Audio('./assets/sounds/pick.mp3');
-pickSound.volume = 0.5;
-const powerupSound = new Audio('./assets/sounds/power_up.mp3');
-powerupSound.volume = 0.5;
+// SFX managed via AudioManager
+const audioManager = new AudioManager({
+    basePath: './assets/sounds',
+    positionalSfx: (window.CONFIG && window.CONFIG.audio && window.CONFIG.audio.positionalSfx) || { panStrength: 0.8 }
+});
+
+// Preload common SFX buffers (names correspond to files without extension)
+audioManager.loadSounds({
+    explosion: './assets/sounds/explosion.wav',
+    comet: './assets/sounds/comet.wav',
+    zap: './assets/sounds/zap.mp3',
+    final: './assets/sounds/final.mp3',
+    pick: './assets/sounds/pick.mp3',
+    power_up: './assets/sounds/power_up.mp3'
+}).catch(() => { });
 
 // Global cleanup state
 let gameCleanupHandlers = [];
@@ -37,39 +39,28 @@ let animationFrameId = null;
 // Add global cleanup function
 function cleanupGame() {
     console.log('Cleaning up game resources...');
-    
+
     // Cancel animation frame
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
     }
-    
+
     // Clean up car resources
     if (typeof car !== 'undefined' && car && car.cleanup) {
         car.cleanup();
     }
-    
-    // Clean up all audio elements
-    const audioElements = [cometSound, explosionSound, zapSound, finalSound, pickSound, powerupSound];
-    audioElements.forEach(audio => {
-        if (audio) {
-            try {
-                audio.pause();
-                audio.removeAttribute('src');
-                audio.load();
-            } catch (e) {
-                console.error('Error', error)
-            }
-        }
-    });
-    
+
+    // Clean up audio manager
+    try { audioManager.cleanup(); } catch (e) { }
+
     // Clear all game arrays
     if (typeof enemies !== 'undefined') enemies.length = 0;
     if (typeof floatingTexts !== 'undefined') floatingTexts.length = 0;
     if (typeof shockwaves !== 'undefined') shockwaves.length = 0;
     if (typeof sideDrones !== 'undefined') sideDrones.length = 0;
     if (typeof droneProjectiles !== 'undefined') droneProjectiles.length = 0;
-    
+
     // Clear global state
     gameStarted = false;
     gameOver = false;
@@ -79,7 +70,7 @@ function cleanupGame() {
     shieldPickup = null;
     novaBomb = null;
     dronePickup = null;
-    
+
     // Run any additional cleanup handlers
     gameCleanupHandlers.forEach(handler => {
         try {
@@ -89,7 +80,7 @@ function cleanupGame() {
         }
     });
     gameCleanupHandlers.length = 0;
-    
+
     console.log('Game cleanup completed');
 }
 
@@ -100,14 +91,14 @@ const diffSel = document.getElementById('difficulty');
 
 function applyDifficulty(value) {
     currentDifficulty = value;
-    
+
     // Get difficulty-specific configuration
     const baseCfg = window.CONFIG?.spawn || {};
     difficultyConfig = baseCfg.difficulty?.[value] || baseCfg.difficulty?.normal || {};
-    
+
     // Apply spawn timing
     spawnIntervalMs = difficultyConfig.intervalMs || baseCfg.intervalMs || 800;
-    
+
     console.log(`Difficulty set to ${value.toUpperCase()}:`, {
         spawnInterval: spawnIntervalMs + 'ms',
         burstSize: `${difficultyConfig.burstMin || baseCfg.burstMin || 1}-${difficultyConfig.burstMax || baseCfg.burstMax || 3}`,
@@ -186,7 +177,7 @@ let hitStopTimeScale = 1.0;
 function addFloatingText(x, y, text, type) {
     const cfg = (window.CONFIG && window.CONFIG.hud && window.CONFIG.hud.floatingText) || {};
     if (!cfg.enabled) return;
-    
+
     const floatingText = createFloatingText(x, y, text, type);
     floatingTexts.push(floatingText);
 }
@@ -194,12 +185,12 @@ function addFloatingText(x, y, text, type) {
 function triggerHitStop(type) {
     const cfg = (window.CONFIG && window.CONFIG.hud && window.CONFIG.hud.hitStop) || {};
     if (!cfg.enabled) return;
-    
+
     let shouldTrigger = false;
     if (type === 'damage' && cfg.triggerOnDamage) shouldTrigger = true;
     if (type === 'pickup' && cfg.triggerOnPickup) shouldTrigger = true;
     if (type === 'explosion' && cfg.triggerOnExplosion) shouldTrigger = true;
-    
+
     if (shouldTrigger) {
         hitStopFrames = cfg.duration || 8;
         hitStopTimeScale = cfg.timeScale || 0.1;
@@ -225,7 +216,7 @@ function run(ts) {
     lastFrameTs = ts || performance.now();
 
     canvas.clear();
-    
+
     // Only advance camera and world if not paused
     if (gameStarted && !gameOver && !gamePaused) {
         // Parallax follow: match screen displacement of the ship
@@ -297,12 +288,9 @@ function run(ts) {
             const winChance = (window.CONFIG && window.CONFIG.comet && window.CONFIG.comet.windowChance) || 0.01;
             if (Math.random() < winChance) {
                 const path = computeCometPathThroughAsteroid(canvas.width, canvas.height);
-                if (path) comet = new Comet(canvas.width, canvas.height, path.start, path.end); 
+                if (path) comet = new Comet(canvas.width, canvas.height, path.start, path.end);
                 else comet = new Comet(canvas.width, canvas.height);
-                try { 
-                    cometSound.currentTime = 0; 
-                    cometSound.play().catch(() => {}); 
-                } catch (e) {}
+                try { audioManager.playSound('comet', comet.x, comet.y, canvas.width, canvas.height); } catch (e) { }
             }
             if (!comet) {
                 const range = (window.CONFIG && window.CONFIG.comet && window.CONFIG.comet.windowDelayRange) || [5000, 15000];
@@ -327,7 +315,7 @@ function run(ts) {
             const crowdThreshold = cfg.crowdThreshold || 20;
             const spawnChance = cfg.spawnChance || 0.15;
             const cooldownMs = cfg.cooldownMs || 30000;
-            
+
             if (enemies.length >= crowdThreshold && (nowTs - lastNovaBombSpawn) >= cooldownMs) {
                 if (Math.random() < spawnChance) {
                     novaBomb = new NovaBomb(canvas.width, canvas.height);
@@ -342,7 +330,7 @@ function run(ts) {
             if (cfg.enabled) {
                 const spawnChance = cfg.spawnChance || 0.12;
                 const cooldownMs = cfg.spawnCooldownMs || 15000;
-                
+
                 if ((nowTs - lastDronePickupSpawn) >= cooldownMs) {
                     if (Math.random() < spawnChance) {
                         dronePickup = new DronePickup(canvas.width, canvas.height);
@@ -362,32 +350,29 @@ function run(ts) {
                     sideDrones.splice(i, 1);
                 }
             }
-            
+
             for (let i = droneProjectiles.length - 1; i >= 0; i--) {
                 const proj = droneProjectiles[i];
                 proj.update(dt);
-                
+
                 if (!proj.alive) {
                     droneProjectiles.splice(i, 1);
                     continue;
                 }
-                
+
                 for (let j = enemies.length - 1; j >= 0; j--) {
                     const enemy = enemies[j];
                     if (!enemy.isDark && !enemy.isHomingMine) continue;
-                    
+
                     const dx = proj.x - enemy.posX;
                     const dy = proj.y - enemy.posY;
                     const dist = Math.hypot(dx, dy);
-                    
+
                     if (dist <= enemy.radius + proj.size) {
                         startExplosion(enemy.posX, enemy.posY);
-                        try { 
-                            explosionSound.currentTime = 0; 
-                            explosionSound.play().catch(() => {}); 
-                        } catch (e) {}
+                        try { audioManager.playSound('explosion', enemy.posX, enemy.posY, canvas.width, canvas.height, { volume: 0.8 }); } catch (e) { }
                         triggerShockwave(enemy.posX, enemy.posY, enemy.radius * 3);
-                        
+
                         droneProjectiles.splice(i, 1);
                         enemies.splice(j, 1);
                         break;
@@ -433,45 +418,72 @@ function run(ts) {
     if (gameStarted && !gameOver) {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const enemy = enemies[i];
-            
+
             // Add null check to prevent errors
             if (!enemy) {
                 enemies.splice(i, 1);
                 continue;
             }
-            
+
             // Update enemy if not paused
             if (!gamePaused) {
                 // Add safety check for update method
                 if (typeof enemy.update === 'function') {
                     enemy.update(dt);
                 }
-                
+                // Check collisions between harmful enemies (e.g., asteroids) and trigger explosion
+                try {
+                    if (enemy.isDark) {
+                        for (let j = i - 1; j >= 0; j--) {
+                            const other = enemies[j];
+                            if (!other) continue;
+                            // Only consider harmful enemies (avoid pickups, etc.)
+                            if (!other.isDark) continue;
+                            // Basic circle collision
+                            const dx2 = enemy.posX - other.posX;
+                            const dy2 = enemy.posY - other.posY;
+                            const dist2 = Math.hypot(dx2, dy2);
+                            const collideRadius = (enemy.radius || 0) + (other.radius || 0);
+                            if (dist2 <= collideRadius) {
+                                const ex = (enemy.posX + other.posX) / 2;
+                                const ey = (enemy.posY + other.posY) / 2;
+                                // Start explosion visual and audio
+                                startExplosion(ex, ey);
+                                try { audioManager.playSound('explosion', ex, ey, canvas.width, canvas.height, { volume: 0.9 }); } catch (e) { }
+                                triggerShockwave(ex, ey, Math.max(collideRadius * 1.5, 120));
+                                // Mark both for removal
+                                try { enemy.health = 0; } catch (e) { enemy.health = 0; }
+                                try { other.health = 0; } catch (e) { other.health = 0; }
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Enemy-enemy collision check failed:', e);
+                }
+
                 // Remove enemies that are off-screen or dead
-                if (enemy.posX < -50 || enemy.posX > canvas.width + 50 || 
-                    enemy.posY < -50 || enemy.posY > canvas.height + 50 || 
+                if (enemy.posX < -50 || enemy.posX > canvas.width + 50 ||
+                    enemy.posY < -50 || enemy.posY > canvas.height + 50 ||
                     enemy.health <= 0) {
                     enemies.splice(i, 1);
                     continue;
                 }
-                
+
                 // Check collision with player (only for harmful enemies)
                 if (enemy.isDark || enemy.isHomingMine) {
                     const dx = enemy.posX - (car.posX + car.width / 2);
                     const dy = enemy.posY - (car.posY + car.height / 2);
                     const distance = Math.hypot(dx, dy);
                     const collisionRadius = enemy.radius + Math.min(car.width, car.height) / 2;
-                    
+
                     if (distance < collisionRadius) {
                         // Handle collision
                         if (car.invincibleHitsRemaining > 0) {
                             // Player has shield
                             car.invincibleHitsRemaining--;
                             startExplosion(enemy.posX, enemy.posY);
-                            try { 
-                                explosionSound.currentTime = 0; 
-                                explosionSound.play().catch(() => {}); 
-                            } catch (e) {}
+                            try { audioManager.playSound('explosion', enemy.posX, enemy.posY, canvas.width, canvas.height, { volume: 0.8 }); } catch (e) { }
                             enemies.splice(i, 1);
                         } else {
                             // Player takes damage
@@ -480,14 +492,11 @@ function run(ts) {
                             car.triggerFeedback('damage');
                             hurtFlashMs = 300;
                             shakeTimeMs = 200;
-                            
+
                             startExplosion(enemy.posX, enemy.posY);
-                            try { 
-                                explosionSound.currentTime = 0; 
-                                explosionSound.play().catch(() => {}); 
-                            } catch (e) {}
+                            try { audioManager.playSound('explosion', enemy.posX, enemy.posY, canvas.width, canvas.height, { volume: 0.9 }); } catch (e) { }
                             enemies.splice(i, 1);
-                            
+
                             // Check game over
                             if (car.health <= 0) {
                                 gameOver = true;
@@ -499,14 +508,14 @@ function run(ts) {
                         continue;
                     }
                 }
-                
+
                 // Handle pickup enemies (heal, speed boost, magnet)
                 if (enemy.isHeal || enemy.isSpeedBoost || enemy.isMagnet) {
                     const dx = enemy.posX - (car.posX + car.width / 2);
                     const dy = enemy.posY - (car.posY + car.height / 2);
                     const distance = Math.hypot(dx, dy);
                     const pickupRadius = enemy.radius + Math.min(car.width, car.height) / 2;
-                    
+
                     if (distance < pickupRadius) {
                         if (enemy.isHeal) {
                             car.health = Math.min(car.maxHealth, car.health + 0.25);
@@ -516,6 +525,17 @@ function run(ts) {
                             healsConsumed++;
                             speedBonusHeals++;
                             applySpeedScaling();
+                            // Spawn a comet immediately when a heal enemy is consumed
+                            try {
+                                if (!comet) {
+                                    comet = new Comet(canvas.width, canvas.height);
+                                    // play comet SFX at spawn
+                                    try { audioManager.playSound('comet', comet.x, comet.y, canvas.width, canvas.height, { volume: 0.9 }); } catch (e) { }
+                                    // schedule next comet window to avoid immediate consecutive spawns
+                                    const range2 = (window.CONFIG && window.CONFIG.comet && window.CONFIG.comet.windowDelayRange) || [5000, 15000];
+                                    nextCometAt = nowTs + (range2[0] + Math.random() * (range2[1] - range2[0]));
+                                }
+                            } catch (e) { }
                         } else if (enemy.isSpeedBoost) {
                             car.speedBoostTimerMs = 3500;
                             car.maxSpeed = car.baseMaxSpeed * 1.4;
@@ -526,18 +546,15 @@ function run(ts) {
                             car.triggerFeedback('magnet');
                             addFloatingText(enemy.posX, enemy.posY, 'MAGNET!', 'magnet');
                         }
-                        
-                        try { 
-                            pickSound.currentTime = 0; 
-                            pickSound.play().catch(() => {}); 
-                        } catch (e) {}
-                        
+
+                        try { audioManager.playSound('pick', enemy.posX, enemy.posY, canvas.width, canvas.height, { volume: 0.6 }); } catch (e) { }
+
                         enemies.splice(i, 1);
                         continue;
                     }
                 }
             }
-            
+
             // Draw enemy - add additional safety check
             if (enemy && typeof enemy.draw === 'function') {
                 enemy.draw(ctx);
@@ -568,7 +585,7 @@ function run(ts) {
     if (comet) {
         if (!gamePaused) {
             comet.update(canvas.width, canvas.height);
-            
+
             const angle = Math.atan2(comet.vy, comet.vx);
             const tx = comet.x - Math.cos(angle) * comet.length;
             const ty = comet.y - Math.sin(angle) * comet.length;
@@ -577,10 +594,7 @@ function run(ts) {
                 const collided = lineCircleIntersect(comet.x, comet.y, tx, ty, e.posX, e.posY, (e.radius || 12) + comet.thickness);
                 if (collided) {
                     startExplosion(e.posX, e.posY);
-                    try { 
-                        explosionSound.currentTime = 0; 
-                        explosionSound.play().catch(() => {}); 
-                    } catch (e) {}
+                    try { audioManager.playSound('explosion', e.posX, e.posY, canvas.width, canvas.height, { volume: 0.85 }); } catch (e) { }
                     applyShockwave(e.posX, e.posY, 200, 8);
                     triggerShockwave(e.posX, e.posY, 220);
                     enemies.splice(i, 1);
@@ -591,7 +605,8 @@ function run(ts) {
                 nextCometAt = nowTs + (5000 + Math.random() * 10000);
             }
         }
-        comet.draw(ctx);
+        // Only draw if comet still exists (it may be nulled above)
+        if (comet) comet.draw(ctx);
     }
 
     // Draw explosion particles - only update if not paused
@@ -658,7 +673,7 @@ function handlePickups(ctx, nowTs) {
     if (centerHeal) {
         centerHeal.update(nowTs);
         centerHeal.draw(ctx, nowTs);
-        
+
         const circleX = centerHeal.posX;
         const circleY = centerHeal.posY;
         const radius = centerHeal.radius;
@@ -671,7 +686,7 @@ function handlePickups(ctx, nowTs) {
         const dx = circleX - closestX;
         const dy = circleY - closestY;
         const intersects = (dx * dx + dy * dy) <= (radius * radius);
-        
+
         if (intersects) {
             const phase = centerHeal.getPhase(nowTs);
             const healAmount = phase;
@@ -682,16 +697,18 @@ function handlePickups(ctx, nowTs) {
             healsConsumed += 1;
             speedBonusHeals += 1;
             applySpeedScaling();
-            
-            try { powerupSound.currentTime = 0; powerupSound.play().catch(() => {}); } catch (e) {}
-            
-            const everyN2 = (window.CONFIG && window.CONFIG.comet && window.CONFIG.comet.healTriggerEvery) || 5;
-            if (!comet && healsConsumed > 0 && healsConsumed % everyN2 === 0 && lastCometHealTrigger !== healsConsumed) {
-                comet = new Comet(canvas.width, canvas.height);
-                lastCometHealTrigger = healsConsumed;
-                const range2 = (window.CONFIG && window.CONFIG.comet && window.CONFIG.comet.windowDelayRange) || [5000, 15000];
-                nextCometAt = nowTs + (range2[0] + Math.random() * (range2[1] - range2[0]));
-            }
+
+            try { audioManager.playSound('power_up', centerHeal.posX, centerHeal.posY, canvas.width, canvas.height, { volume: 0.7 }); } catch (e) { }
+            // Spawn a comet every time a center heal is taken
+            try {
+                if (!comet) {
+                    comet = new Comet(canvas.width, canvas.height);
+                    // play comet SFX at spawn
+                    try { audioManager.playSound('comet', comet.x, comet.y, canvas.width, canvas.height, { volume: 0.9 }); } catch (e) { }
+                    const range2 = (window.CONFIG && window.CONFIG.comet && window.CONFIG.comet.windowDelayRange) || [5000, 15000];
+                    nextCometAt = nowTs + (range2[0] + Math.random() * (range2[1] - range2[0]));
+                }
+            } catch (e) { }
             centerHeal = null;
             centerHealCooldownUntil = nowTs + (10000 + Math.random() * 10000);
         } else if (centerHeal.dead) {
@@ -704,16 +721,17 @@ function handlePickups(ctx, nowTs) {
     if (shieldPickup) {
         shieldPickup.update(nowTs);
         shieldPickup.draw(ctx, nowTs);
-        
+
         if (checkCircleRectCollision(shieldPickup, car)) {
             const cfg = (window.CONFIG && window.CONFIG.shield) || {};
             const hits = cfg.maxHits != null ? cfg.maxHits : 3;
             car.applyInvincibility(hits);
             try {
-                const sfx = new Audio((cfg && cfg.pickupSound) || 'power_up.mp3');
-                sfx.volume = 0.6;
-                sfx.currentTime = 0; sfx.play().catch(() => {});
-            } catch (e) {}
+                // play configured pickup sound (fallback to power_up)
+                const pickupSoundCfg = (cfg && cfg.pickupSound) ? cfg.pickupSound : 'power_up.mp3';
+                // pass the configured string directly; AudioManager will resolve filenames/URLs
+                audioManager.playSound(pickupSoundCfg, shieldPickup.posX, shieldPickup.posY, canvas.width, canvas.height, { volume: 0.6 });
+            } catch (e) { }
             addFloatingText(shieldPickup.posX, shieldPickup.posY, 'SHIELD!', 'shield');
             triggerHitStop('pickup');
             shieldPickup = null;
@@ -726,39 +744,34 @@ function handlePickups(ctx, nowTs) {
     if (novaBomb) {
         novaBomb.update(nowTs);
         novaBomb.draw(ctx, nowTs);
-        
+
         if (checkCircleRectCollision(novaBomb, car)) {
             const cfg = (window.CONFIG && window.CONFIG.novaBomb) || {};
             const explosionRadius = cfg.explosionRadius || 500;
-            
+
             for (let i = 0; i < 5; i++) {
                 const expX = Math.random() * canvas.width;
                 const expY = Math.random() * canvas.height;
                 startExplosion(expX, expY);
                 triggerShockwave(expX, expY, explosionRadius / (i + 1));
             }
-            
+
             startExplosion(novaBomb.posX, novaBomb.posY);
             triggerShockwave(novaBomb.posX, novaBomb.posY, explosionRadius);
-            
+
             enemies.length = 0;
-            
+
             shakeTimeMs = 800;
             hurtFlashMs = 0;
-            
-            try { 
-                explosionSound.currentTime = 0; 
-                explosionSound.volume = 1.0;
-                explosionSound.play().catch(() => {}); 
+
+            try {
+                audioManager.playSound('explosion', novaBomb.posX, novaBomb.posY, canvas.width, canvas.height, { volume: 1.0 });
+                // delayed celebratory sound
                 setTimeout(() => {
-                    try {
-                        powerupSound.currentTime = 0;
-                        powerupSound.volume = 0.8;
-                        powerupSound.play().catch(() => {});
-                    } catch (e) {}
+                    try { audioManager.playSound('power_up', novaBomb.posX, novaBomb.posY, canvas.width, canvas.height, { volume: 0.8 }); } catch (e) { }
                 }, 200);
-            } catch (e) {}
-            
+            } catch (e) { }
+
             car.health = Math.min(car.maxHealth, car.health + 0.2);
             car.triggerFeedback('heal');
             addFloatingText(novaBomb.posX, novaBomb.posY, 'NOVA!', 'nova');
@@ -773,24 +786,21 @@ function handlePickups(ctx, nowTs) {
     if (dronePickup) {
         dronePickup.update(nowTs);
         dronePickup.draw(ctx, nowTs);
-        
+
         if (checkCircleRectCollision(dronePickup, car)) {
             const cfg = (window.CONFIG && window.CONFIG.drones) || {};
             const maxDrones = cfg.maxDrones || 2;
-            
+
             if (sideDrones.length < maxDrones) {
                 const newDrone = new SideDrone(car, sideDrones.length);
                 sideDrones.push(newDrone);
-                
-                try { 
-                    powerupSound.currentTime = 0; 
-                    powerupSound.play().catch(() => {}); 
-                } catch (e) {}
-                
+
+                try { audioManager.playSound('power_up', dronePickup.posX, dronePickup.posY, canvas.width, canvas.height, { volume: 0.7 }); } catch (e) { }
+
                 addFloatingText(dronePickup.posX, dronePickup.posY, 'DRONE!', 'pickup');
                 triggerHitStop('pickup');
             }
-            
+
             dronePickup = null;
         } else if (dronePickup.dead) {
             dronePickup = null;
@@ -824,9 +834,9 @@ function drawHUD(ctx, nowTs) {
     // === MAIN HUD BAR === 
     const hudBarHeight = 70;
     const hudPadding = 20;
-    
+
     ctx.save();
-    
+
     // Enhanced HUD background with sci-fi gradient
     const hudGradient = ctx.createLinearGradient(0, 0, 0, hudBarHeight);
     hudGradient.addColorStop(0, 'rgba(10, 10, 26, 0.95)');
@@ -835,7 +845,7 @@ function drawHUD(ctx, nowTs) {
     hudGradient.addColorStop(1, 'rgba(0, 0, 0, 0.98)');
     ctx.fillStyle = hudGradient;
     ctx.fillRect(0, 0, canvas.width, hudBarHeight);
-    
+
     // Animated scan lines effect
     const scanLineY = ((nowTs * 0.03) % (hudBarHeight * 2)) - hudBarHeight;
     if (scanLineY >= 0 && scanLineY <= hudBarHeight) {
@@ -846,7 +856,7 @@ function drawHUD(ctx, nowTs) {
         ctx.fillStyle = scanGradient;
         ctx.fillRect(0, scanLineY - 3, canvas.width, 6);
     }
-    
+
     // Grid overlay pattern
     ctx.strokeStyle = 'rgba(0, 229, 255, 0.1)';
     ctx.lineWidth = 1;
@@ -858,7 +868,7 @@ function drawHUD(ctx, nowTs) {
         ctx.lineTo(x, hudBarHeight);
         ctx.stroke();
     }
-    
+
     // Top border with animated pulse
     const borderPulse = 0.6 + 0.4 * Math.sin(nowTs * 0.003);
     ctx.strokeStyle = `rgba(0, 229, 255, ${borderPulse})`;
@@ -869,7 +879,7 @@ function drawHUD(ctx, nowTs) {
     ctx.moveTo(0, 0);
     ctx.lineTo(canvas.width, 0);
     ctx.stroke();
-    
+
     // Bottom border
     ctx.strokeStyle = `rgba(0, 229, 255, ${borderPulse * 0.8})`;
     ctx.lineWidth = 1.5;
@@ -878,79 +888,79 @@ function drawHUD(ctx, nowTs) {
     ctx.moveTo(0, hudBarHeight - 1);
     ctx.lineTo(canvas.width, hudBarHeight - 1);
     ctx.stroke();
-    
+
     // Corner decorative elements
     ctx.strokeStyle = 'rgba(0, 229, 255, 0.9)';
     ctx.lineWidth = 2.5;
     ctx.shadowBlur = 10;
     const cornerSize = 30;
-    
+
     // Top-left corner
     ctx.beginPath();
     ctx.moveTo(0, cornerSize);
     ctx.lineTo(0, 0);
     ctx.lineTo(cornerSize, 0);
     ctx.stroke();
-    
+
     // Top-right corner
     ctx.beginPath();
     ctx.moveTo(canvas.width - cornerSize, 0);
     ctx.lineTo(canvas.width, 0);
     ctx.lineTo(canvas.width, cornerSize);
     ctx.stroke();
-    
+
     ctx.restore();
 
     // === PRIMARY STATS SECTION ===
     const stats = [
-        { 
-            label: 'HULL INTEGRITY', 
-            value: `${(car.health * 100).toFixed(0)}%`, 
+        {
+            label: 'HULL INTEGRITY',
+            value: `${(car.health * 100).toFixed(0)}%`,
             color: car.health <= 0.25 ? '#FF1744' : car.health <= 0.50 ? '#FF6B35' : '#00E5FF',
             priority: 'critical',
             icon: '🛡️'
         },
-        { 
-            label: 'DAMAGE LEVEL', 
-            value: `${car.hitCount}/3`, 
+        {
+            label: 'DAMAGE LEVEL',
+            value: `${car.hitCount}/3`,
             color: car.hitCount >= 2 ? '#FF1744' : car.hitCount >= 1 ? '#FF6B35' : '#50FA7B',
             priority: 'high',
             icon: '⚠️'
         },
-        { 
-            label: 'HEALS COLLECTED', 
-            value: `${healsConsumed}`, 
+        {
+            label: 'HEALS COLLECTED',
+            value: `${healsConsumed}`,
             color: '#50FA7B',
             priority: 'medium',
             icon: '🌙'
         },
-        { 
-            label: 'MISSION TIME', 
-            value: `${String(minsHud).padStart(2, '0')}:${String(secsHud).padStart(2, '0')}`, 
+        {
+            label: 'MISSION TIME',
+            value: `${String(minsHud).padStart(2, '0')}:${String(secsHud).padStart(2, '0')}`,
             color: '#F1FA8C',
             priority: 'high',
             icon: '⏱️'
         }
     ];
-    
+
     ctx.save();
     ctx.textBaseline = 'top';
-    
+
     // Left section - Primary stats with enhanced styling
     let leftX = hudPadding + 10;
     const statY = 16;
     const primaryGap = 110;
-    
+
     for (let i = 0; i < stats.length; i++) {
         const stat = stats[i];
         const isCritical = stat.priority === 'critical';
         const isHigh = stat.priority === 'high';
-        
+
         // Stat container background
         const containerWidth = 95;
         const containerHeight = 38;
         const containerY = statY - 4;
-        
+
         // Background panel
         const panelGradient = ctx.createLinearGradient(leftX - 5, containerY, leftX - 5, containerY + containerHeight);
         panelGradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
@@ -958,12 +968,12 @@ function drawHUD(ctx, nowTs) {
         panelGradient.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
         ctx.fillStyle = panelGradient;
         ctx.fillRect(leftX - 5, containerY, containerWidth, containerHeight);
-        
+
         // Panel border
         ctx.strokeStyle = isCritical ? 'rgba(255, 23, 68, 0.6)' : 'rgba(0, 229, 255, 0.4)';
         ctx.lineWidth = 1;
         ctx.strokeRect(leftX - 5, containerY, containerWidth, containerHeight);
-        
+
         // Label with Orbitron font
         ctx.font = "9px 'Orbitron', monospace";
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
@@ -971,7 +981,7 @@ function drawHUD(ctx, nowTs) {
         ctx.shadowBlur = 2;
         ctx.textAlign = 'left';
         ctx.fillText(stat.label, leftX, statY);
-        
+
         // Value with enhanced styling
         const fontSize = isCritical ? 20 : isHigh ? 18 : 16;
         ctx.font = `bold ${fontSize}px 'Orbitron', monospace`;
@@ -979,7 +989,7 @@ function drawHUD(ctx, nowTs) {
         ctx.shadowColor = stat.color;
         ctx.shadowBlur = isCritical ? 12 : isHigh ? 8 : 6;
         ctx.fillText(stat.value, leftX, statY + 18);
-        
+
         // Status indicator dot for critical stats
         if (isCritical) {
             const dotPulse = 0.5 + 0.5 * Math.sin(nowTs * 0.008);
@@ -990,39 +1000,39 @@ function drawHUD(ctx, nowTs) {
             ctx.arc(leftX + containerWidth - 15, containerY + 8, 4, 0, Math.PI * 2);
             ctx.fill();
         }
-        
+
         leftX += primaryGap;
     }
-    
+
     ctx.restore();
 
     // === ENHANCED STATUS INDICATORS ===
     const statusItems = [
-        { 
-            label: 'SHIELD', 
-            value: car.invincibleHitsRemaining > 0 ? `${car.invincibleHitsRemaining}` : '—', 
-            color: car.invincibleHitsRemaining > 0 ? '#8BE9FD' : '#6272A4', 
+        {
+            label: 'SHIELD',
+            value: car.invincibleHitsRemaining > 0 ? `${car.invincibleHitsRemaining}` : '—',
+            color: car.invincibleHitsRemaining > 0 ? '#8BE9FD' : '#6272A4',
             active: car.invincibleHitsRemaining > 0,
             icon: '🛡️'
         },
-        { 
-            label: 'BOOST', 
-            value: (car.speedBoostTimerMs || 0) > 0 ? `${Math.ceil(car.speedBoostTimerMs / 1000)}S` : '—', 
-            color: (car.speedBoostTimerMs || 0) > 0 ? '#FF69B4' : '#6272A4', 
+        {
+            label: 'BOOST',
+            value: (car.speedBoostTimerMs || 0) > 0 ? `${Math.ceil(car.speedBoostTimerMs / 1000)}S` : '—',
+            color: (car.speedBoostTimerMs || 0) > 0 ? '#FF69B4' : '#6272A4',
             active: (car.speedBoostTimerMs || 0) > 0,
             icon: '🚀'
         },
-        { 
-            label: 'MAGNET', 
-            value: (car.magnetTimerMs || 0) > 0 ? `${Math.ceil(car.magnetTimerMs / 1000)}S` : '—', 
-            color: (car.magnetTimerMs || 0) > 0 ? '#50FA7B' : '#6272A4', 
+        {
+            label: 'MAGNET',
+            value: (car.magnetTimerMs || 0) > 0 ? `${Math.ceil(car.magnetTimerMs / 1000)}S` : '—',
+            color: (car.magnetTimerMs || 0) > 0 ? '#50FA7B' : '#6272A4',
             active: (car.magnetTimerMs || 0) > 0,
             icon: '🧲'
         },
-        { 
-            label: 'DRONES', 
-            value: sideDrones.length > 0 ? `${sideDrones.length}` : '—', 
-            color: sideDrones.length > 0 ? '#F1FA7C' : '#6272A4', 
+        {
+            label: 'DRONES',
+            value: sideDrones.length > 0 ? `${sideDrones.length}` : '—',
+            color: sideDrones.length > 0 ? '#F1FA7C' : '#6272A4',
             active: sideDrones.length > 0,
             icon: '🤖'
         }
@@ -1031,16 +1041,16 @@ function drawHUD(ctx, nowTs) {
     ctx.save();
     const statusStartX = canvas.width - hudPadding - 280;
     let statusX = statusStartX;
-    
+
     for (let i = 0; i < statusItems.length; i++) {
         const status = statusItems[i];
         const isActive = status.active;
-        
+
         // Enhanced status box
         const boxWidth = 65;
         const boxHeight = 38;
         const boxY = 16;
-        
+
         // Box background with gradient
         const statusGradient = ctx.createLinearGradient(statusX, boxY, statusX, boxY + boxHeight);
         if (isActive) {
@@ -1053,28 +1063,28 @@ function drawHUD(ctx, nowTs) {
         }
         ctx.fillStyle = statusGradient;
         ctx.fillRect(statusX, boxY, boxWidth, boxHeight);
-        
+
         // Box border with glow
         ctx.strokeStyle = isActive ? status.color : 'rgba(100, 100, 100, 0.4)';
         ctx.lineWidth = isActive ? 2 : 1;
         ctx.shadowColor = isActive ? status.color : 'transparent';
         ctx.shadowBlur = isActive ? 8 : 0;
         ctx.strokeRect(statusX, boxY, boxWidth, boxHeight);
-        
+
         // Status label
         ctx.font = "8px 'Orbitron', monospace";
         ctx.fillStyle = isActive ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
         ctx.textAlign = 'center';
         ctx.shadowBlur = 1;
-        ctx.fillText(status.label, statusX + boxWidth/2, boxY + 6);
-        
+        ctx.fillText(status.label, statusX + boxWidth / 2, boxY + 6);
+
         // Status value with enhanced styling
         ctx.font = "bold 14px 'Orbitron', monospace";
         ctx.fillStyle = status.color;
         ctx.shadowColor = isActive ? status.color : 'transparent';
         ctx.shadowBlur = isActive ? 6 : 0;
-        ctx.fillText(status.value, statusX + boxWidth/2, boxY + 20);
-        
+        ctx.fillText(status.value, statusX + boxWidth / 2, boxY + 20);
+
         // Active indicator pulse
         if (isActive) {
             const activePulse = 0.4 + 0.6 * Math.sin(nowTs * 0.006 + i * 1.2);
@@ -1083,10 +1093,10 @@ function drawHUD(ctx, nowTs) {
             ctx.arc(statusX + boxWidth - 8, boxY + 8, 3, 0, Math.PI * 2);
             ctx.fill();
         }
-        
+
         statusX += boxWidth + 6;
     }
-    
+
     ctx.restore();
 
     // === ENHANCED HEALTH DISPLAY ===
@@ -1095,15 +1105,15 @@ function drawHUD(ctx, nowTs) {
         const critThresh = 0.25;
         const healthPct = Math.max(0, Math.min(100, Math.round(car.health * 100)));
         const isCritical = car.health <= critThresh;
-        
+
         ctx.save();
         const healthX = 25;
         const healthY = canvas.height - 90;
-        
+
         // Enhanced health frame
         const frameWidth = 160;
         const frameHeight = 65;
-        
+
         // Frame background with sophisticated gradient
         const healthFrameGradient = ctx.createLinearGradient(healthX - 10, healthY - 10, healthX - 10, healthY + frameHeight);
         healthFrameGradient.addColorStop(0, 'rgba(10, 10, 26, 0.95)');
@@ -1112,7 +1122,7 @@ function drawHUD(ctx, nowTs) {
         healthFrameGradient.addColorStop(1, 'rgba(0, 0, 0, 0.98)');
         ctx.fillStyle = healthFrameGradient;
         ctx.fillRect(healthX - 10, healthY - 10, frameWidth, frameHeight);
-        
+
         // Frame border with dynamic color
         const healthBorderPulse = isCritical ? 0.8 + 0.2 * Math.sin(nowTs * 0.012) : 0.7;
         ctx.strokeStyle = isCritical ? `rgba(255, 23, 68, ${healthBorderPulse})` : `rgba(0, 229, 255, ${healthBorderPulse})`;
@@ -1120,20 +1130,20 @@ function drawHUD(ctx, nowTs) {
         ctx.shadowColor = isCritical ? '#FF1744' : '#00E5FF';
         ctx.shadowBlur = isCritical ? 12 : 8;
         ctx.strokeRect(healthX - 10, healthY - 10, frameWidth, frameHeight);
-        
+
         // Corner accents
         ctx.strokeStyle = isCritical ? '#FF1744' : '#00E5FF';
         ctx.lineWidth = 2.5;
         ctx.shadowBlur = 10;
         const healthCornerSize = 20;
-        
+
         // Top-left corner
         ctx.beginPath();
         ctx.moveTo(healthX - 10, healthY - 10 + healthCornerSize);
         ctx.lineTo(healthX - 10, healthY - 10);
         ctx.lineTo(healthX - 10 + healthCornerSize, healthY - 10);
         ctx.stroke();
-        
+
         // Health label with Orbitron font
         ctx.font = "11px 'Orbitron', monospace";
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
@@ -1142,29 +1152,29 @@ function drawHUD(ctx, nowTs) {
         ctx.shadowColor = '#00E5FF';
         ctx.shadowBlur = 3;
         ctx.fillText('HULL INTEGRITY', healthX, healthY);
-        
+
         // Health percentage with enhanced styling
         ctx.font = "bold 28px 'Orbitron', monospace";
         ctx.fillStyle = isCritical ? '#FF1744' : '#FFFFFF';
         ctx.shadowColor = isCritical ? '#FF1744' : '#00E5FF';
         ctx.shadowBlur = isCritical ? 16 : 12;
         ctx.fillText(`${healthPct}%`, healthX, healthY + 18);
-        
+
         // Enhanced health bar with sci-fi styling
         const barWidth = 120;
         const barHeight = 12;
         const barX = healthX;
         const barY = healthY + 43;
-        
+
         // Bar background with inner glow
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(barX, barY, barWidth, barHeight);
-        
+
         // Bar frame
         ctx.strokeStyle = 'rgba(0, 229, 255, 0.6)';
         ctx.lineWidth = 1;
         ctx.strokeRect(barX, barY, barWidth, barHeight);
-        
+
         // Health fill with dynamic gradient
         if (car.health > 0) {
             const healthBarGradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
@@ -1181,13 +1191,13 @@ function drawHUD(ctx, nowTs) {
                 healthBarGradient.addColorStop(0.5, '#00E5FF');
                 healthBarGradient.addColorStop(1, '#50FA7B');
             }
-            
+
             ctx.fillStyle = healthBarGradient;
             ctx.shadowColor = isCritical ? '#FF1744' : '#50FA7B';
             ctx.shadowBlur = 8;
             const fillWidth = (barWidth - 4) * car.health;
             ctx.fillRect(barX + 2, barY + 2, fillWidth, barHeight - 4);
-            
+
             // Health bar segments
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.lineWidth = 1;
@@ -1199,13 +1209,13 @@ function drawHUD(ctx, nowTs) {
                 ctx.stroke();
             }
         }
-        
+
         // Critical health warning
         if (isCritical) {
             const warningPulse = 0.6 + 0.4 * Math.sin(nowTs * 0.010);
             ctx.fillStyle = `rgba(255, 68, 68, ${warningPulse})`;
         }
-        
+
         // Critical health warning
         if (isCritical) {
             const warningPulse = 0.6 + 0.4 * Math.sin(nowTs * 0.010);
@@ -1216,7 +1226,7 @@ function drawHUD(ctx, nowTs) {
             ctx.shadowBlur = 8;
             ctx.fillText('⚠ CRITICAL', healthX + frameWidth - 20, healthY + 2);
         }
-        
+
         ctx.restore();
     }
 
@@ -1229,21 +1239,21 @@ function drawHUD(ctx, nowTs) {
     // === ENHANCED PAUSE OVERLAY ===
     if (gamePaused && gameStarted && !gameOver) {
         ctx.save();
-        
+
         // Semi-transparent overlay with gradient
-        const pauseOverlayGradient = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height)/2);
+        const pauseOverlayGradient = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 0, canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 2);
         pauseOverlayGradient.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
         pauseOverlayGradient.addColorStop(0.7, 'rgba(10, 10, 26, 0.8)');
         pauseOverlayGradient.addColorStop(1, 'rgba(0, 0, 0, 0.9)');
         ctx.fillStyle = pauseOverlayGradient;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
+
         // Animated grid pattern
         ctx.strokeStyle = 'rgba(0, 229, 255, 0.15)';
         ctx.lineWidth = 1;
         const pauseGridSize = 40;
         const pauseOffset = (nowTs * 0.005) % pauseGridSize;
-        
+
         for (let x = -pauseOffset; x < canvas.width + pauseGridSize; x += pauseGridSize) {
             ctx.beginPath();
             ctx.moveTo(x, 0);
@@ -1256,13 +1266,13 @@ function drawHUD(ctx, nowTs) {
             ctx.lineTo(canvas.width, y);
             ctx.stroke();
         }
-        
+
         // Pause panel
         const pausePanelW = Math.min(420, canvas.width - 60);
         const pausePanelH = 180;
         const pausePanelX = (canvas.width - pausePanelW) / 2;
         const pausePanelY = (canvas.height - pausePanelH) / 2;
-        
+
         // Panel background
         const pausePanelGradient = ctx.createLinearGradient(pausePanelX, pausePanelY, pausePanelX, pausePanelY + pausePanelH);
         pausePanelGradient.addColorStop(0, 'rgba(10, 10, 26, 0.96)');
@@ -1271,7 +1281,7 @@ function drawHUD(ctx, nowTs) {
         pausePanelGradient.addColorStop(1, 'rgba(0, 0, 0, 0.98)');
         ctx.fillStyle = pausePanelGradient;
         ctx.fillRect(pausePanelX, pausePanelY, pausePanelW, pausePanelH);
-        
+
         // Panel border
         const pauseBorderPulse = 0.7 + 0.3 * Math.sin(nowTs * 0.004);
         ctx.strokeStyle = `rgba(0, 229, 255, ${pauseBorderPulse})`;
@@ -1279,7 +1289,7 @@ function drawHUD(ctx, nowTs) {
         ctx.shadowColor = '#00E5FF';
         ctx.shadowBlur = 12;
         ctx.strokeRect(pausePanelX, pausePanelY, pausePanelW, pausePanelH);
-        
+
         // Enhanced pause icon
         const iconSize = 30;
         const iconX = canvas.width / 2 - iconSize / 2;
@@ -1287,13 +1297,13 @@ function drawHUD(ctx, nowTs) {
         const barWidth = 8;
         const barHeight = iconSize;
         const barGap = 8;
-        
+
         ctx.fillStyle = '#00E5FF';
         ctx.shadowColor = '#00E5FF';
         ctx.shadowBlur = 12;
         ctx.fillRect(iconX - barGap / 2 - barWidth, iconY, barWidth, barHeight);
         ctx.fillRect(iconX + barGap / 2, iconY, barWidth, barHeight);
-        
+
         // "PAUSED" text with enhanced styling
         const pauseTextPulse = 0.9 + 0.1 * Math.sin(nowTs * 0.006);
         ctx.fillStyle = `rgba(255, 255, 255, ${pauseTextPulse})`;
@@ -1303,14 +1313,14 @@ function drawHUD(ctx, nowTs) {
         ctx.textBaseline = 'middle';
         ctx.font = "bold 32px 'Orbitron', monospace";
         ctx.fillText('PAUSED', canvas.width / 2, pausePanelY + 105);
-        
+
         // Mission status
         ctx.font = "12px 'Exo 2', sans-serif";
         ctx.fillStyle = 'rgba(0, 229, 255, 0.8)';
         ctx.shadowColor = '#00E5FF';
         ctx.shadowBlur = 4;
         ctx.fillText('MISSION SUSPENDED', canvas.width / 2, pausePanelY + 130);
-        
+
         // Instruction text
         const pauseInstructionPulse = 0.7 + 0.3 * Math.sin(nowTs * 0.005);
         ctx.font = "14px 'Exo 2', sans-serif";
@@ -1318,14 +1328,14 @@ function drawHUD(ctx, nowTs) {
         ctx.shadowColor = '#FFFFFF';
         ctx.shadowBlur = 4;
         ctx.fillText('Press SPACEBAR to resume mission', canvas.width / 2, pausePanelY + 150);
-        
+
         // Exit instruction
         ctx.font = "12px 'Exo 2', sans-serif";
         ctx.fillStyle = `rgba(255, 255, 255, ${pauseInstructionPulse * 0.8})`;
         ctx.shadowColor = '#FFFFFF';
         ctx.shadowBlur = 3;
         ctx.fillText('Press ESC to exit to main menu', canvas.width / 2, pausePanelY + 165);
-        
+
         ctx.restore();
     }
 
@@ -1334,7 +1344,7 @@ function drawHUD(ctx, nowTs) {
         ctx.save();
         const hintY = canvas.height - 60;
         const hintPulse = 0.7 + 0.3 * Math.sin(nowTs * 0.004);
-        
+
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = "16px 'Orbitron', monospace";
@@ -1342,14 +1352,14 @@ function drawHUD(ctx, nowTs) {
         ctx.shadowColor = '#00E5FF';
         ctx.shadowBlur = 8;
         ctx.fillText('Press SPACEBAR to begin mission', canvas.width / 2, hintY);
-        
+
         // Subtitle
         ctx.font = "12px 'Exo 2', sans-serif";
         ctx.fillStyle = `rgba(255, 255, 255, ${hintPulse * 0.8})`;
         ctx.shadowColor = '#FFFFFF';
         ctx.shadowBlur = 4;
         ctx.fillText('Systems armed and ready', canvas.width / 2, hintY + 20);
-        
+
         ctx.restore();
     }
 }
@@ -1437,7 +1447,7 @@ function handleSpacebarPress() {
     const now = performance.now();
     if (now - spacebarCooldown < 200) return; // 200ms cooldown to prevent spam
     spacebarCooldown = now;
-    
+
     if (!gameStarted && !gameOver) {
         // Start game from menu
         startGame();
@@ -1449,10 +1459,10 @@ function handleSpacebarPress() {
 
 function exitToMainMenu() {
     console.log('Exiting to main menu...');
-    
+
     // Clean up game state
     cleanupGame();
-    
+
     // Reset all game variables for a fresh start
     gameStarted = false;
     gameOver = false;
@@ -1460,34 +1470,34 @@ function exitToMainMenu() {
     totalPausedTime = 0;
     gameStartTs = 0;
     pausedTs = 0;
-    
+
     // Sync global state after changes
     syncGlobalGameState();
-    
+
     // Reset timing variables
     lastSpawn = 0;
     lastFrameTs = 0;
-    
+
     // Reset game statistics
     healsConsumed = 0;
     speedBonusHeals = 0;
     worldDistance = 0;
     finalDurationMs = 0;
     lastCometHealTrigger = 0;
-    
+
     // Reset cooldown timers
     centerHealCooldownUntil = 0;
     nextShieldWindowAt = 0;
     lastNovaBombSpawn = 0;
     lastDronePickupSpawn = 0;
     nextCometAt = 0;
-    
+
     // Reset visual effects
     shakeTimeMs = 0;
     hurtFlashMs = 0;
     hitStopFrames = 0;
     hitStopTimeScale = 1.0;
-    
+
     // Reset car to initial state
     if (car) {
         car.posX = carConfig.pos.x;
@@ -1504,47 +1514,47 @@ function exitToMainMenu() {
         car.idleDecayMultiplier = 1.0;
         car.isCurrentlyIdle = false;
     }
-    
+
     // Reset camera position
     if (canvas) {
         canvas.cameraX = 0;
         canvas.cameraY = 0;
     }
-    
+
     // Show main menu
     if (menuEl) {
         menuEl.style.display = 'flex';
     }
-    
+
     console.log('Returned to main menu - all game state reset');
 }
 
 function startGame() {
     console.log('Starting new game...');
-    
+
     // STEP 1: COMPLETE CLEANUP FIRST
     cleanupGame();
-    
+
     // STEP 2: CLEAR AND RESET SCREEN COMPLETELY
     // Cancel any existing animation frames
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
     }
-    
+
     // Clear canvas completely and fill with game background
     canvas.clear();
     const ctx = canvas.getContext();
     ctx.fillStyle = '#0F1020';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
     // Reset canvas camera position
     canvas.cameraX = 0;
     canvas.cameraY = 0;
-    
+
     // Force complete background redraw (stars, nebula, etc.)
     canvas.draw();
-    
+
     // STEP 3: RESET ALL GAME STATE VARIABLES
     gameOver = false;
     gameStarted = true;
@@ -1553,37 +1563,37 @@ function startGame() {
     totalPausedTime = 0;
     pausedTs = 0;
     finalDurationMs = 0;
-    
+
     // Reset timing variables
     lastSpawn = 0;
     lastFrameTs = 0;
-    
+
     // Reset game statistics
     healsConsumed = 0;
     speedBonusHeals = 0;
     worldDistance = 0;
     lastCometHealTrigger = 0;
-    
+
     // Reset cooldown timers
     centerHealCooldownUntil = 0;
     nextShieldWindowAt = 0;
     lastNovaBombSpawn = 0;
     lastDronePickupSpawn = 0;
     nextCometAt = 0;
-    
+
     // Reset visual effects
     shakeTimeMs = 0;
     hurtFlashMs = 0;
     hitStopFrames = 0;
     hitStopTimeScale = 1.0;
-    
+
     // STEP 4: CLEAR ALL GAME ARRAYS COMPLETELY
     enemies.length = 0;
     floatingTexts.length = 0;
     shockwaves.length = 0;
     sideDrones.length = 0;
     droneProjectiles.length = 0;
-    
+
     // Reset all pickups/objects
     centerHeal = null;
     comet = null;
@@ -1591,59 +1601,57 @@ function startGame() {
     shieldPickup = null;
     novaBomb = null;
     dronePickup = null;
-    
+
     // STEP 5: RESET PLAYER TO INITIAL STATE
     if (car) {
         // Reset position to starting location
         car.posX = carConfig.pos.x;
         car.posY = carConfig.pos.y;
-        
+
         // Reset physics
         car.velocityX = 0;
         car.velocityY = 0;
         car.rotation = 0;
         car.targetRotation = 0;
-        
+
         // Reset health and status
         car.health = car.maxHealth;
         car.hitCount = 0;
         car.invincibleHitsRemaining = 0;
-        
+
         // Reset power-ups
         car.speedBoostTimerMs = 0;
         car.magnetTimerMs = 0;
         car.maxSpeed = car.baseMaxSpeed;
-        
+
         // Reset idle system
         car.lastMovementTime = performance.now();
         car.idleDecayMultiplier = 1.0;
         car.isCurrentlyIdle = false;
-        
+
         // Reset any visual feedback
         car.feedbackTimer = 0;
         if (car.damageDecals) car.damageDecals.length = 0;
-        
+
         // CRITICAL: Reinitialize controls after cleanup
         car.setControls();
     }
-    
+
     // STEP 6: SYNC GLOBAL STATE
     syncGlobalGameState();
-    
+
     // STEP 7: HIDE MENU
     if (menuEl) menuEl.style.display = 'none';
-    
-    // STEP 8: PRIME AUDIO SYSTEM
-    [cometSound, explosionSound, zapSound, finalSound, pickSound, powerupSound].forEach(audio => {
-        try { 
-            audio.currentTime = 0;
-            audio.play().then(() => { 
-                audio.pause(); 
-                audio.currentTime = 0; 
-            }).catch(() => {}); 
-        } catch (e) {}
-    });
-    
+
+    // STEP 8: PRIME AUDIO SYSTEM (resume AudioContext on user gesture if possible)
+    try {
+        const ctx = audioManager && audioManager.ensureAudioContext && audioManager.ensureAudioContext();
+        if (ctx && ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+            // browsers often require a user gesture to unlock audio; try to resume
+            ctx.resume().catch(() => { });
+        }
+    } catch (e) { }
+
     // STEP 9: START FRESH GAME LOOP
     console.log('Screen cleared, everything reset - starting fresh game');
     animationFrameId = requestAnimationFrame(run);
@@ -1662,7 +1670,7 @@ function togglePause() {
         pausedTs = performance.now();
         console.log('Game paused via spacebar');
     }
-    
+
     // Sync global state after changes
     syncGlobalGameState();
 }

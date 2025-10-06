@@ -1,196 +1,212 @@
 // Audio Management System - Handles all game audio including positional SFX and dynamic music
 
+// Small AudioManager using WebAudio for SFX (supports overlapping playback and positional panning)
 class AudioManager {
-    constructor() {
-        const cfg = (window.CONFIG && window.CONFIG.audio) || {};
-        this.musicCfg = cfg.dynamicMusic || {};
-        this.sfxCfg = cfg.positionalSfx || {};
-        
-        // Music layers
-        this.baseMusic = null;
-        this.percussionLayer = null;
-        this.bassLayer = null;
-        
-        // Current audio states
-        this.currentPercussionVolume = 0;
-        this.currentBassVolume = 0;
-        this.targetPercussionVolume = 0;
-        this.targetBassVolume = 0;
-        
-        // Audio context and node tracking for cleanup
+    constructor(cfg = {}) {
+        this.cfg = cfg || {};
+        this.sfxCfg = this.cfg.positionalSfx || {};
+        this.sounds = new Map(); // name -> AudioBuffer
+        this.soundUrls = new Map(); // name -> original url (for fallback/resolution)
+        this.buffersLoaded = false;
+
+        // WebAudio context will be lazily created on first user gesture/play
         this.audioContext = null;
-        this.audioNodes = new Set(); // track all created nodes for cleanup
-        this.timeouts = new Set(); // track timeouts for cleanup
-        
-        this.initializeMusicLayers();
+
+        // Keep track of active nodes so we can cleanly disconnect
+        this.activeNodes = new Set();
     }
-    
-    initializeMusicLayers() {
-        if (!this.musicCfg.enabled) return;
-        
-        try {
-            // Use existing space music as base layer
-            this.baseMusic = new Audio('./assets/sounds/space.mp3');
-            this.baseMusic.loop = true;
-            this.baseMusic.volume = this.musicCfg.baseVolume || 0.4;
-            
-            // Create percussion layer (reuse ./assets/sounds/space.mp3 with different processing)
-            this.percussionLayer = new Audio('./assets/sounds/space.mp3');
-            this.percussionLayer.loop = true;
-            this.percussionLayer.volume = 0; // Start silent
-            this.percussionLayer.playbackRate = 1.1; // Slightly faster for percussion feel
-            
-            // Create bass layer
-            this.bassLayer = new Audio('./assets/sounds/space.mp3');
-            this.bassLayer.loop = true;
-            this.bassLayer.volume = 0; // Start silent
-            this.bassLayer.playbackRate = 0.8; // Slower, deeper feel
-            
-        } catch (e) {
-            console.warn('AudioManager: Failed to initialize music layers', e);
-        }
-    }
-    
-    // Clean up all audio resources
-    cleanup() {
-        // Clear all timeouts
-        for (const timeout of this.timeouts) {
-            clearTimeout(timeout);
-        }
-        this.timeouts.clear();
-        
-        // Stop and clean music layers
-        try {
-            if (this.baseMusic) {
-                this.baseMusic.pause();
-                this.baseMusic.removeAttribute('src');
-                this.baseMusic.load(); // Force garbage collection
-                this.baseMusic = null;
-            }
-            if (this.percussionLayer) {
-                this.percussionLayer.pause();
-                this.percussionLayer.removeAttribute('src');
-                this.percussionLayer.load();
-                this.percussionLayer = null;
-            }
-            if (this.bassLayer) {
-                this.bassLayer.pause();
-                this.bassLayer.removeAttribute('src');
-                this.bassLayer.load();
-                this.bassLayer = null;
-            }
-        } catch (e) {
-            console.warn('AudioManager: Error cleaning up music layers', e);
-        }
-        
-        // Close audio context and clean up nodes
-        if (this.audioContext && this.audioContext.state !== 'closed') {
+
+    ensureAudioContext() {
+        if (!this.audioContext) {
             try {
-                // Disconnect all tracked nodes
-                for (const nodeData of this.audioNodes) {
-                    try {
-                        if (nodeData.audioElement && nodeData.audioElement._audioNode) {
-                            nodeData.audioElement._audioNode.disconnect();
-                            nodeData.audioElement._audioNode = null;
-                        }
-                        if (nodeData.audioElement && nodeData.audioElement._panNode) {
-                            nodeData.audioElement._panNode.disconnect();
-                            nodeData.audioElement._panNode = null;
-                        }
-                    } catch (e) {
-                        // Ignore disconnect errors
-                    }
-                }
-                this.audioNodes.clear();
-                
-                // Close audio context
-                this.audioContext.close();
-                this.audioContext = null;
-            } catch (e) {
-                console.warn('AudioManager: Error closing audio context', e);
-            }
-        }
-    }
-    
-    playPositionalSound(audioElement, x, y, canvasWidth, canvasHeight) {
-        if (!this.sfxCfg.enabled || !audioElement) return;
-        
-        const maxDistance = this.sfxCfg.maxDistance || 800;
-        const minVolume = this.sfxCfg.minVolume || 0.1;
-        const maxVolume = this.sfxCfg.maxVolume || 1.0;
-        const panStrength = this.sfxCfg.panStrength || 0.8;
-        const rolloffFactor = this.sfxCfg.rolloffFactor || 2.0;
-        const centerDeadZone = this.sfxCfg.centerDeadZone || 50;
-        
-        // Calculate distance from screen center
-        const centerX = canvasWidth / 2;
-        const centerY = canvasHeight / 2;
-        const distance = Math.hypot(x - centerX, y - centerY);
-        
-        // Calculate volume based on distance
-        const normalizedDistance = Math.min(distance / maxDistance, 1);
-        const volumeMultiplier = Math.max(minVolume, maxVolume * Math.pow(1 - normalizedDistance, rolloffFactor));
-        
-        // Calculate stereo panning
-        let pan = 0;
-        if (distance > centerDeadZone) {
-            const normalizedX = (x - centerX) / (canvasWidth / 2);
-            pan = Math.max(-1, Math.min(1, normalizedX * panStrength));
-        }
-        
-        // Apply audio effects
-        try {
-            if (audioElement.volume !== undefined) {
-                audioElement.volume = Math.min(1, audioElement.volume * volumeMultiplier);
-            }
-            
-            // Apply stereo panning if supported
-            if (window.AudioContext || window.webkitAudioContext) {
-                this.applyStereoPanning(audioElement, pan);
-            }
-        } catch (e) {
-            console.warn('AudioManager: Error applying positional audio', e);
-        }
-    }
-    
-    applyStereoPanning(audioElement, pan) {
-        try {
-            if (!this.audioContext) {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (e) {
+                console.warn('AudioManager: WebAudio not supported', e);
+                this.audioContext = null;
             }
-            
-            if (!audioElement._audioNode) {
-                audioElement._audioNode = this.audioContext.createMediaElementSource(audioElement);
-                audioElement._panNode = this.audioContext.createStereoPanner();
-                audioElement._audioNode.connect(audioElement._panNode);
-                audioElement._panNode.connect(this.audioContext.destination);
-                
-                // Track nodes for cleanup
-                this.audioNodes.add({
-                    audioElement: audioElement,
-                    audioNode: audioElement._audioNode,
-                    panNode: audioElement._panNode
-                });
+        }
+        return this.audioContext;
+    }
+
+    // Load a set of named sounds. soundMap: { name: url }
+    async loadSounds(soundMap = {}) {
+        const ctx = this.ensureAudioContext();
+        const promises = [];
+        for (const [name, url] of Object.entries(soundMap)) {
+            // remember original url for this name
+            try { this.soundUrls.set(name, url); } catch (e) { }
+            promises.push(fetch(url)
+                .then(res => res.arrayBuffer())
+                .then(buf => ctx ? ctx.decodeAudioData(buf) : Promise.resolve(null))
+                .then(decoded => {
+                    if (decoded) this.sounds.set(name, decoded);
+                })
+                .catch(err => {
+                    console.warn('AudioManager: Failed to load sound', name, url, err);
+                }));
+        }
+        await Promise.all(promises);
+        this.buffersLoaded = true;
+    }
+
+    // Play a sound by name or URL. If x,y and canvasWidth/Height supplied and panning enabled, apply positional effects.
+    // nameOrUrl: either a key previously loaded via loadSounds(name->url) or a URL/filename (e.g. 'power_up.mp3' or './assets/sounds/power_up.mp3')
+    async playSound(nameOrUrl, x = null, y = null, canvasWidth = null, canvasHeight = null, opts = {}) {
+        const ctx = this.ensureAudioContext();
+
+        // Helper to actually play a decoded buffer via WebAudio
+        const playBuffer = (buffer) => {
+            try {
+                if (!ctx || !buffer) return false;
+                if (ctx.state === 'suspended' && typeof ctx.resume === 'function') ctx.resume().catch(() => { });
+
+                const src = ctx.createBufferSource();
+                src.buffer = buffer;
+                const gain = ctx.createGain();
+                gain.gain.value = (opts.volume != null) ? opts.volume : 1.0;
+
+                let panNode = null;
+                if (typeof ctx.createStereoPanner === 'function' && x != null && canvasWidth) {
+                    panNode = ctx.createStereoPanner();
+                    panNode.pan.value = this._calculatePan(x, canvasWidth);
+                }
+
+                src.connect(gain);
+                if (panNode) {
+                    gain.connect(panNode);
+                    panNode.connect(ctx.destination);
+                } else {
+                    gain.connect(ctx.destination);
+                }
+
+                const nodeGroup = { src, gain, panNode };
+                this.activeNodes.add(nodeGroup);
+                src.onended = () => {
+                    try {
+                        if (panNode) panNode.disconnect();
+                        gain.disconnect();
+                        src.disconnect();
+                    } catch (e) { }
+                    this.activeNodes.delete(nodeGroup);
+                };
+                src.start(0);
+                return true;
+            } catch (e) {
+                console.warn('AudioManager: playBuffer failed', e);
+                return false;
             }
-            
-            if (audioElement._panNode) {
-                audioElement._panNode.pan.value = pan;
+        };
+
+        // If a preloaded key exists, play it. Also try base name without extension (e.g. 'power_up' when passed 'power_up.mp3')
+        let buffer = this.sounds.get(nameOrUrl);
+        if (!buffer) {
+            const baseKey = nameOrUrl && String(nameOrUrl).replace(/\.\w+$/, '');
+            if (baseKey && this.sounds.has(baseKey)) buffer = this.sounds.get(baseKey);
+        }
+        // If we still don't have a buffer, but we have a recorded URL for this key, try to fetch/decode that URL
+        if (!buffer && this.soundUrls.has(nameOrUrl)) {
+            const url = this.soundUrls.get(nameOrUrl);
+            if (ctx && url) {
+                try {
+                    const res = await fetch(url);
+                    const arr = await res.arrayBuffer();
+                    const decoded = await ctx.decodeAudioData(arr);
+                    if (decoded) {
+                        this.sounds.set(nameOrUrl, decoded);
+                        buffer = decoded;
+                    }
+                } catch (e) {
+                    console.warn('AudioManager: failed to fetch/decode stored url', url, e);
+                }
             }
+        }
+        if (ctx && buffer) {
+            return playBuffer(buffer);
+        }
+
+        // If nameOrUrl looks like a filename or URL (contains '/' or ends with .mp3/.wav/.ogg), attempt to fetch and decode it
+        const looksLikeUrl = /[\/]|\.(mp3|wav|ogg|m4a)$/i.test(nameOrUrl);
+        if (looksLikeUrl) {
+            // Build a usable URL: if nameOrUrl is a bare filename, resolve using basePath
+            let url = nameOrUrl;
+            if (!/^[a-zA-Z0-9]+:\/\//.test(nameOrUrl) && !nameOrUrl.startsWith('.') && !nameOrUrl.startsWith('/')) {
+                // bare filename like 'power_up.mp3'
+                url = (this.cfg.basePath || './assets/sounds') + '/' + nameOrUrl;
+            }
+
+            if (ctx) {
+                // try to fetch and decode
+                try {
+                    const res = await fetch(url);
+                    const arr = await res.arrayBuffer();
+                    const decoded = await ctx.decodeAudioData(arr);
+                    // cache it under the original nameOrUrl for next time
+                    this.sounds.set(nameOrUrl, decoded);
+                    return playBuffer(decoded);
+                } catch (e) {
+                    console.warn('AudioManager: failed to fetch/decode', url, e);
+                }
+            }
+
+            // Fallback to HTMLAudio element if WebAudio not available or decode failed
+            try {
+                const audio = new Audio(url);
+                audio.volume = (opts.volume != null) ? opts.volume : 1.0;
+                audio.play().catch(() => { });
+                return true;
+            } catch (e) {
+                console.warn('AudioManager: fallback audio failed', e);
+            }
+            return false;
+        }
+
+        // As a last resort, try to play by constructing a URL from basePath + nameOrUrl
+        try {
+            const url = (this.cfg.basePath || './assets/sounds') + '/' + nameOrUrl + '.mp3';
+            if (ctx) {
+                const res = await fetch(url);
+                const arr = await res.arrayBuffer();
+                const decoded = await ctx.decodeAudioData(arr);
+                this.sounds.set(nameOrUrl, decoded);
+                return playBuffer(decoded);
+            }
+            const audio = new Audio(url);
+            audio.volume = (opts.volume != null) ? opts.volume : 1.0;
+            audio.play().catch(() => { });
+            return true;
         } catch (e) {
-            console.warn('AudioManager: Stereo panning not supported', e);
+            console.warn('AudioManager: failed to play', nameOrUrl, e);
+            return false;
         }
     }
-    
-    // Add setTimeout wrapper to track timeouts
-    setTimeout(callback, delay) {
-        const timeout = setTimeout(() => {
-            this.timeouts.delete(timeout);
-            callback();
-        }, delay);
-        this.timeouts.add(timeout);
-        return timeout;
+
+    _calculatePan(x, canvasWidth) {
+        const centerX = canvasWidth / 2;
+        const normalizedX = (x - centerX) / (canvasWidth / 2);
+        const panStrength = (this.sfxCfg && this.sfxCfg.panStrength) || 0.8;
+        return Math.max(-1, Math.min(1, normalizedX * panStrength));
+    }
+
+    // Stop and free resources
+    cleanup() {
+        try {
+            for (const n of this.activeNodes) {
+                try {
+                    if (n.src) n.src.stop(0);
+                    if (n.panNode) n.panNode.disconnect();
+                    if (n.gain) n.gain.disconnect();
+                    if (n.src) n.src.disconnect();
+                } catch (e) { }
+            }
+            this.activeNodes.clear();
+            if (this.audioContext && this.audioContext.state !== 'closed') {
+                try { this.audioContext.close(); } catch (e) { }
+            }
+            this.audioContext = null;
+        } catch (e) {
+            console.warn('AudioManager: cleanup error', e);
+        }
     }
 }
 
-// Make it globally available
 window.AudioManager = AudioManager;
